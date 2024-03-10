@@ -1,0 +1,19 @@
+//
+//  ViewController.swift
+//  SwiftBasic
+//
+//  Created by 李雪阳 on 2024/3/10.
+//
+
+import UIKit
+
+class ViewController: UIViewController {
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Do any additional setup after loading the view.
+    }
+
+
+}
+
