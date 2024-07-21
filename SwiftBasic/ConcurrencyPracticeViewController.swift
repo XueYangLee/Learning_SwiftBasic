@@ -7,12 +7,16 @@
 
 import UIKit
 
-class ConcurrencyPracticeViewController: BaseViewController {
+class ConcurrencyPracticeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view.
+        Task {
+            await taskGroupPractice()
+        }
+        
     }
      
     /*concurrency 允许以类似同步的方式来编写包含异步代码的复杂逻辑
@@ -335,6 +339,186 @@ class ConcurrencyPracticeViewController: BaseViewController {
      实际开发中，建议优先考虑使用async let 。
      */
     
+    
+    //MARK: - Actor
+    /*
+     为了解决数据竞争问题，Concurrency 引入了 actor，同一时刻只允许一个线程来访问它。（将上面案例中的 class 改为 actor 查看结果）
+     actor 类似于 class，也是一种引用类型，也可以有方法、属性和构造函数、还可以遵守协议。但 actor 不支持继承，不能有便利构造函数，也不支持final 或override 。
+     actor 都遵守了Actor 协议和AnyObject 协议
+     
+     隔离是 actor 中的一个重要概念，隔离的是 actor 的内部状态和外界访问。
+     actor 内部：可以通过同步/异步的方式读取/设置其属性和进行方法的调用。
+     actor 外部：只能通过异步的方式读取其属性和进行方法的调用，且必须使用 await。无论如何都不允许外部设置属性。
+     */
+    
+    
+    //MARK: - MainActor
+    /*
+     由于 Concurrency 并不能保证执行 await 前面代码的线程与执行后面代码的线程相同，而 iOS 又规定 UI 的处理必须在主线程，为了保证当前更新 UI 的代码一定运行在主线程，可以使用 MainActor。MainActor 是一种特殊类型的 actor，它总是运行在主线程之上，表示为 @MainActor 。
+     使用 @MainActor 可以修饰类型、函数（参数）、属性、属性包装，它符合以下规则：
+         修饰结构体/枚举时，其所有成员都会变为 MainActor。
+         修饰结构体/枚举中的方法，该方法会变为 MainActor。
+         修饰类时，其所有成员和子类都会变为 MainActor。
+         修饰类中的方法，该方法及其任何重写也会变为 MainActor。
+         修饰函数的参数，该参数会变为 MainActor。
+         类型中使用了 @MainActor 修饰的属性包装，该类型自动变为 MainActor（如 @State 、 @StateObject 和 @ObservedObject）。
+     对 MainActor 中的属性的任何读写和方法的调用都会发生在主线程，这意味着可以消除类似 DispatchQueue.main.async 这样显式回到主线程执行的代码块
+     
+     GlobalActor
+     全局参与者， MainActor 就是一种全局参与者，它所修饰的内容会在同一个线程上运行
+     */
+    
+    // 传统⽅式
+    func handleDataMain() {
+        DispatchQueue.global().async {
+            print("处理数据")
+            DispatchQueue.main.async {
+                print("更新UI")
+            }
+        }
+    }
+    
+    // 修饰类型
+    @MainActor
+    struct MainModel {
+        // 修饰属性
+        @MainActor
+        var name: String = ""
+        // 修饰⽅法
+        @MainActor
+        func handleData() {
+            print("处理数据")
+        }
+    }
+    
+    // 修饰参数
+    func handleData(completion: @MainActor @escaping () -> Void) {
+        DispatchQueue.global().async {
+            Task {
+                await completion()
+            }
+        }
+        
+        // ⽅式⼆
+        Task.detached {
+            await MainActor.run {
+                completion()
+            }
+        }
+        // ⽅式三
+        Task.detached { @MainActor in
+            await completion()
+        }
+    }
+    
+    //MARK: - Continuations
+    /*
+     将基于回调的老异步代码转换为支持 Concurrency 语法的新异步代码的技术称之为 Continuations。
+     Swift 提供了 withCheckedContinuation() 和 withCheckedThrowingContinuation() 方法用于将基于回调的异步代码改造为 Concurrency 的形
+     式，二者的区别在于后者可以抛出异常。
+     Xcode 13 提供了一键转换的方法：选中某个需要转换的方法名，然后右击选择 Refactor 弹出菜单，共有 3 种转换方式。
+     i. Convert Function to Async：原方法直接转换为异步方式。
+     ii. Add Async Alternative：原方法保留，但标记为deprecated ，然后新建一个异步方法调用原方法。
+     iii. Add Async Wrapper：原方法保留，新建一个异步方法调用原方法。（建议使用）
+     */
+    
+    
+    //MARK: - AsyncSequence与AsyncStream
+    /*
+     AsyncSequence
+     
+     Sequence（序列） 和 Collection（集合） 协议构成了 Swift 集合类型的基础，其中是 Sequence 协议是基础， Collection 协议继承自
+     Sequence 协议。之前学习的 Array、Set、Dictionary 又实现了 Collection 协议。
+     AsyncSequence 表示异步序列，用于安全地处理多个异步的序列值。
+     AsyncSequence 也可以使用 等高级操作。
+     AsyncSequence 已经在 URL、URLSession 和 Notifications 等 API 中使用
+     */
+    
+    func asyncSequenceUsageURL() async throws {
+        let url = URL(string: "https://www.baidu.com")!
+        // 边下边打印，所以会打印多次
+        for try await line in url.lines {
+            print(line, Thread.current)
+        }
+    }
+    
+    func asyncSequenceUsageURLSession() async throws {
+        let url = URL(string: "https://www.abc.edu.cn")!
+        let request = URLRequest(url: url)
+        let (bytes, _) = try await URLSession.shared.bytes(for: request)
+        for try await byte in bytes {
+            print(byte, Thread.current)
+        }
+    }
+
+    func asyncSequenceUsageNotification() async throws {
+        let notificationCenter = NotificationCenter.default
+        let notifications = notificationCenter.notifications(named: .init(rawValue: "customName"))
+        for await notification in notifications {
+            print(notification, Thread.current)
+        }
+    }
+    
+    
+    //MARK: - AsyncStream
+    /*
+     AsyncStream
+     一个结构体，它遵守了 AsyncSequence 协议（类似于 Array 与 Sequence 的关系），表示一种有序的、异步生成的元素序列。
+     */
+    
+    var cities = ["北京", "南京", "⻄安", "杭州", "⼴州"]
+    func getCities() async -> [String] {
+        var result = [String]()
+        while !cities.isEmpty {
+            Thread.sleep(forTimeInterval: 1.0)
+            result.append(cities.popLast() ?? "")
+        }
+        return result
+    }
+    // 使⽤Concurrency
+    func getConcurrencyCities() async -> [String] {
+        var result = [String]()
+        while !cities.isEmpty {
+        Thread.sleep(forTimeInterval: 1.0)
+            result.append(cities.popLast() ?? "")
+        }
+        return result
+    }
+
+    // 使⽤AsyncStream
+    func getStreamCities() -> AsyncStream<String> {
+        AsyncStream(String.self) { continuation in
+        // 内部需要使⽤ continuation.yield()产⽣值或使⽤ continuation.finish()结束
+            Task {
+                while !cities.isEmpty {
+                    Thread.sleep(forTimeInterval: 1.0)
+                    continuation.yield(cities.popLast() ?? "")
+                }
+                // 结束
+                continuation.finish()
+            }
+        }
+    }
+    
+    
+    func asyncStreamPractice() {
+        Task {
+            var result = [String]()
+            // 遍历
+//            for await city in self.getCities() {
+//                // 1秒输出⼀个
+//                print(city)
+//                result.append(city)
+//            }
+            // 调⽤了finish()以后才会往下执⾏
+            print("获取了 \(result.count) 个数据")
+            
+            
+            for try await time in Timer.stream{
+                DPrint(time)
+            }
+        }
+    }
 }
 
 //get async  协议
@@ -350,9 +534,9 @@ protocol SomeProcotol {
 struct NewsModel: Codable {
  var reason: String
  var error_code: Int
- var result: Result
+ var result: NewsResult
 }
-struct Result: Codable {
+struct NewsResult: Codable {
  var stat: String
  var data: [DataItem]
 }
@@ -362,4 +546,23 @@ struct DataItem: Codable {
  var category: String
  var author_name: String
  var url: String
+}
+
+
+
+extension Timer {
+    private static var count = 0
+    
+    static var stream: AsyncStream<Date> {
+        AsyncStream { continuation in
+            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                continuation.yield(Date())
+                //计数
+                count += 1
+                if count == 10 {
+                    continuation.finish()
+                }
+            }
+        }
+    }
 }

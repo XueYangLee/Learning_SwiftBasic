@@ -7,7 +7,7 @@
 
 import UIKit
 
-class GrammarPracticeViewController: BaseViewController {
+class GrammarPracticeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -38,7 +38,7 @@ class GrammarPracticeViewController: BaseViewController {
         
         for i in array {
             
-        }//"ha"
+        }//"ha" 
         
         array.forEach { i in
             if i == "xa" {
@@ -826,11 +826,11 @@ struct AssociateStructTest: AssociateProtocol {
 
 //MARK: - 值类型 引用类型
 /*
- 值类型
+ 值类型   深拷贝
  值类型是一种当它被赋值给一个常量或者变量，或者被传递给函数时会被 拷⻉ 的类型。//并非指向同一东西，而是复制一份 制作的分身
  Swift 中的结构体（包括枚举）是值类型，所以它在赋值或者传递时总是会被拷贝。
  
- 引用类型
+ 引用类型   浅拷贝
  不同于值类型，引用类型被赋值到一个常量或者变量，或者被传递到一个函数时它不会被拷贝，而是指向同一个实例对象。
  内部使用引用计数器管理内存（ARC）。
  */
